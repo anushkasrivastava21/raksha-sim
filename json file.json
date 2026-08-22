@@ -1,0 +1,33 @@
+{
+  "device_id": "ESP32_VitalsRig_01",
+  "timestamp": "1755840000",
+  "ecg": {
+    "heart_rate_bpm": 75,
+    "samples": [
+      1852, 1848, 1860, 1855, 1850,
+      1845, 1870, 1920, 2450, 3600,
+      3950, 3200, 2300, 1950, 1860,
+      1845, 1850, 1855, 1848, 1852
+    ]
+  },
+  "urine_sensor": {
+    "red": 3300,
+    "green": 3250,
+    "blue": 3400
+  },
+  "stethoscope": {
+    "rms": 220,
+    "min": 1500,
+    "max": 2600,
+    "samples": 50
+  },
+  "temperature": {
+    "body_temp_c": 36.6
+  },
+  "pulse_oximeter": {
+    "heart_rate_bpm": 74,
+    "spo2_percent": 98,
+    "ir_raw": 135420
+  },
+  "status": "complete"
+}
