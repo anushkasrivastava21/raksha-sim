@@ -28,3 +28,4 @@ requests
 # test dependencies
 pytest
 httpx
+pyserial
