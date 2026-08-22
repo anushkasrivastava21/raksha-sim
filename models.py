@@ -15,6 +15,8 @@ class Vitals(Base):
     urine_r = Column(Float)
     urine_g = Column(Float)
     urine_b = Column(Float)
+    bp_sys = Column(Integer)
+    bp_dia = Column(Integer)
     patient_speech_text = Column(String, nullable=True)
 
 class Triage(Base):

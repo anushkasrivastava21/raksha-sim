@@ -1,6 +1,6 @@
 import os
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 from unittest.mock import patch, MagicMock
 
@@ -30,7 +30,7 @@ sys.modules['urine_processor'].process_urine.side_effect = mock_process_urine
 def get_valid_payload():
     return {
         "device_id": "test_device",
-        "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "ecg": {"heart_rate_bpm": 72, "samples": [1000]*50},
         "urine_sensor": {"red": 255, "green": 234, "blue": 112},
         "stethoscope": {"rms": 200, "min": 1500, "max": 2500, "samples": 300},
@@ -65,7 +65,7 @@ def test_post_vitals_round_trip(client):
 def test_post_triage_round_trip(client):
     payload = {
         "patient_id": "test_patient",
-        "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "triage": "Green",
         "confidence": 0.95
     }
