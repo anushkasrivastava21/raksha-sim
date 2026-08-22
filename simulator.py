@@ -36,8 +36,6 @@ def get_normal_payload():
         },
         "status": "active",
         "patient_id": "patient_normal",
-        "bp_sys": 120.0,
-        "bp_dia": 80.0,
         "patient_speech_text": "I feel perfectly fine today."
     }
 
@@ -71,8 +69,6 @@ def get_edge_case_payload():
         },
         "status": "critical",
         "patient_id": "patient_edge_case",
-        "bp_sys": 140.0,
-        "bp_dia": 90.0,
         "patient_speech_text": "I feel very dizzy and short of breath."
     }
 

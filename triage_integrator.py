@@ -116,11 +116,7 @@ def parse_sensor_packet(sensor_packet: dict):
 
     from urine_processor import process_urine
     urine_severity = process_urine(urine_rgb)
-    if 'step_3_bp' in sensor_packet and isinstance(sensor_packet['step_3_bp'], dict):
-        bp = sensor_packet['step_3_bp']
-        bp_sys, bp_dia = float(bp.get('systolic', 120.0)), float(bp.get('diastolic', 80.0))
-    else:
-        bp_sys, bp_dia = 120.0, 80.0
+
 
     if 'temperature' in sensor_packet and isinstance(sensor_packet['temperature'], dict):
         temp = float(sensor_packet['temperature'].get('body_temp_c', 37.0))
@@ -132,8 +128,6 @@ def parse_sensor_packet(sensor_packet: dict):
 
     return {
         'ecg_hr': ecg_hr,
-        'bp_sys': bp_sys,
-        'bp_dia': bp_dia,
         'spo2': spo2,
         'temperature': temp,
         'urine_severity': urine_severity,
@@ -146,8 +140,8 @@ def predict_final_triage(sensor_packet: dict) -> dict:
     
     features = pd.DataFrame([{
         'ecg_hr': parsed['ecg_hr'],
-        'bp_sys': parsed['bp_sys'],
-        'bp_dia': parsed['bp_dia'],
+        'bp_sys': 120.0,
+        'bp_dia': 80.0,
         'spo2': parsed['spo2'],
         'temperature': parsed['temperature'],
         'urine_severity': parsed['urine_severity']

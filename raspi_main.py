@@ -44,8 +44,7 @@ def main():
     # This packet will accumulate all the sensor readings
     sensor_packet = {
         "step_1_audio": "RECORD_MIC",  # Triggers live recording in triage_integrator
-        "patient_speech_text": "",
-        "step_3_bp": {"systolic": 120, "diastolic": 80}  # Dummy BP if not measured
+        "patient_speech_text": ""
     }
 
     commands = ["REQ_TEMP", "REQ_URINE", "REQ_ECG", "REQ_SPO2", "REQ_STETH"]

@@ -37,8 +37,6 @@ def get_valid_payload():
         "temperature": {"body_temp_c": 37.0},
         "pulse_oximeter": {"heart_rate_bpm": 72, "spo2_percent": 98, "ir_raw": 135000},
         "status": "complete",
-        "bp_sys": 120,
-        "bp_dia": 80,
         "patient_speech_text": "feeling good"
     }
 
@@ -59,8 +57,6 @@ def test_post_vitals_round_trip(client):
     assert vital["urine_r"] == 255
     assert vital["urine_g"] == 234
     assert vital["urine_b"] == 112
-    assert vital["bp_sys"] == 120
-    assert vital["bp_dia"] == 80
 
 def test_post_triage_round_trip(client):
     payload = {
@@ -85,7 +81,7 @@ def test_schema_model_field_parity():
     # Because VitalsIn is nested in this branch (for ESP32), we adapt the parity test 
     # to ensure all mapping fields exist in models.Vitals
     flat_fields = [
-        "bp_sys", "bp_dia", "ecg_hr", "ecg_samples", "steth_rms", "steth_min", 
+        "ecg_hr", "ecg_samples", "steth_rms", "steth_min", 
         "steth_max", "steth_samples", "spo2_percent", "spo2_hr", "spo2_ir_raw", 
         "temperature", "urine_r", "urine_g", "urine_b", "patient_speech_text"
     ]
