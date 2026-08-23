@@ -1,8 +1,12 @@
 def check_mews(vitals_dict):
-    # Updated to extract values from the new nested structure
-    hr = vitals_dict.get("ecg", {}).get("heart_rate_bpm", 0)
-    spo2 = vitals_dict.get("pulse_oximeter", {}).get("spo2_percent", 100)
-    temp = vitals_dict.get("temperature", {}).get("body_temp_c", 37.0)
+    # Support both nested (hardware) and flat (VitalsIn schema) payloads
+    hr = (vitals_dict.get("ecg", {}) or {}).get("heart_rate_bpm") \
+         or vitals_dict.get("ecg_hr", 0)
+    spo2 = (vitals_dict.get("pulse_oximeter", {}) or {}).get("spo2_percent") \
+           or vitals_dict.get("spo2", 100)
+    temp = (vitals_dict.get("temperature", {}) or {}).get("body_temp_c") \
+           if isinstance(vitals_dict.get("temperature"), dict) \
+           else vitals_dict.get("temperature", 37.0)
 
     reasons = []
     status = "NONE"

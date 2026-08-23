@@ -95,7 +95,8 @@ def parse_sensor_packet(sensor_packet: dict):
         if ecg_hr is None:
             ecg_hr = float(po.get('heart_rate_bpm', 75.0))
     else:
-        spo2 = float(sensor_packet.get('step_4_pulse_oximetry', {}).get('spo2', 98.0))
+        # Flat payload fallback (matches VitalsIn schema from POST /vitals)
+        spo2 = float(sensor_packet.get('spo2', sensor_packet.get('step_4_pulse_oximetry', {}).get('spo2', 98.0)))
 
     if ecg_hr is None:
         ecg_hr = 75.0
@@ -121,7 +122,8 @@ def parse_sensor_packet(sensor_packet: dict):
     if 'temperature' in sensor_packet and isinstance(sensor_packet['temperature'], dict):
         temp = float(sensor_packet['temperature'].get('body_temp_c', 37.0))
     else:
-        temp = float(sensor_packet.get('step_5_ir_temperature', 37.0))
+        # Flat payload fallback (matches VitalsIn schema from POST /vitals)
+        temp = float(sensor_packet.get('temperature', sensor_packet.get('step_5_ir_temperature', 37.0)))
 
     from ecg_processor import process_ecg
     ecg_result = process_ecg(raw_ecg)
