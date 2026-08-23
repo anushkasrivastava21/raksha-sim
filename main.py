@@ -62,15 +62,6 @@ def fetch_ml_prediction(vitals_dict: dict):
             "reasons": ["Local ML Engine Offline - Standard Rule Fallback Used"]
         }
 
-# Updated CORS per PRD Task 5: Keeping only "*" for hackathon simplicity
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 @app.get("/")
 def read_root():
     return {
@@ -160,4 +151,4 @@ def list_patients(limit: int = 50, db: Session = Depends(get_db)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
