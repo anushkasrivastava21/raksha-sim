@@ -4,6 +4,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
 import traceback
+import serial
+import threading
+import time
 
 from models import Base, Vitals, Triage
 import schemas
@@ -177,32 +180,95 @@ def init_session(payload: dict = None):
     }
     return {"status": "ok", "message": f"Session initialized for {p_id}", "patient_id": p_id}
 
+esp_serial = None
+serial_lock = threading.Lock()
+
+def fetch_from_esp(cmd: str, timeout: int = 15):
+    global esp_serial
+    if esp_serial is None:
+        try:
+            esp_serial = serial.Serial("/dev/ttyUSB0", 115200, timeout=1)
+            time.sleep(2)
+            esp_serial.reset_input_buffer()
+        except Exception as e:
+            print(f"Failed to connect to ESP32: {e}")
+            return None
+            
+    expected_code = cmd.replace("REQ_", "")
+    
+    with serial_lock:
+        try:
+            esp_serial.reset_input_buffer()
+            esp_serial.write(f"{cmd}\n".encode('utf-8'))
+            start_time = time.time()
+            
+            while time.time() - start_time < timeout:
+                line = esp_serial.readline().decode('utf-8', errors='ignore').strip()
+                if not line:
+                    continue
+                print(f"ESP32 Raw: {line}") # Log to console for debugging
+                parts = line.split('|')
+                if len(parts) == 3:
+                    sensor_code, json_payload, _ = parts
+                    if sensor_code == expected_code:
+                        try:
+                            return json.loads(json_payload)
+                        except:
+                            return None
+        except Exception as e:
+            print(f"Error reading from ESP32: {e}")
+            return None
+    return None
+
 @app.api_route("/trigger/spo2", methods=["GET", "POST"])
 def trigger_spo2():
-    active_session["spo2"] = 98.0
-    active_session["ecg_hr"] = 72.0
-    return {"status": "ok", "sensor": "MAX30102", "spo2": 98.0, "ecg_hr": 72.0}
+    data = fetch_from_esp("REQ_SPO2")
+    if data:
+        active_session["spo2"] = data.get("spo2_percent", active_session["spo2"])
+        active_session["ecg_hr"] = data.get("heart_rate_bpm", active_session.get("ecg_hr", 72.0))
+        print(f"🫀 [API] SPO2 Triggered -> SpO2: {active_session['spo2']}%, HR: {active_session['ecg_hr']} bpm")
+        return {"status": "ok", "sensor": "MAX30102", "spo2": active_session["spo2"], "ecg_hr": active_session["ecg_hr"]}
+    raise HTTPException(status_code=503, detail="Failed to fetch SPO2 from hardware")
 
 @app.api_route("/trigger/ecg", methods=["GET", "POST"])
 def trigger_ecg():
-    active_session["ecg_hr"] = 74.0
-    return {"status": "ok", "sensor": "AD8232", "ecg_hr": 74.0, "rhythm": "Normal Sinus"}
+    data = fetch_from_esp("REQ_ECG")
+    if data:
+        active_session["ecg_hr"] = data.get("heart_rate_bpm", active_session["ecg_hr"])
+        print(f"💓 [API] ECG Triggered -> HR: {active_session['ecg_hr']} bpm")
+        return {"status": "ok", "sensor": "AD8232", "ecg_hr": active_session["ecg_hr"]}
+    raise HTTPException(status_code=503, detail="Failed to fetch ECG from hardware")
 
 @app.api_route("/trigger/temp", methods=["GET", "POST"])
 def trigger_temp():
-    active_session["temperature"] = 36.8
-    return {"status": "ok", "sensor": "MLX90614", "temperature": 36.8}
+    data = fetch_from_esp("REQ_TEMP")
+    if data:
+        active_session["temperature"] = data.get("body_temp_c", active_session["temperature"])
+        print(f"🌡️ [API] TEMP Triggered -> Temp: {active_session['temperature']}°C")
+        return {"status": "ok", "sensor": "MLX90614", "temperature": active_session["temperature"]}
+    raise HTTPException(status_code=503, detail="Failed to fetch TEMP from hardware")
 
 @app.api_route("/trigger/urine", methods=["GET", "POST"])
 def trigger_urine():
-    active_session["urine_rgb"] = [255.0, 255.0, 0.0]
-    return {"status": "ok", "sensor": "TCS3200", "urine_rgb": [255.0, 255.0, 0.0], "color": "Yellow"}
+    data = fetch_from_esp("REQ_URINE")
+    if data:
+        active_session["urine_rgb"] = [
+            data.get("red", 255.0),
+            data.get("green", 255.0),
+            data.get("blue", 0.0)
+        ]
+        print(f"🧪 [API] URINE Triggered -> RGB: {active_session['urine_rgb']}")
+        return {"status": "ok", "sensor": "TCS3200", "urine_rgb": active_session["urine_rgb"]}
+    raise HTTPException(status_code=503, detail="Failed to fetch URINE from hardware")
 
 @app.api_route("/trigger/stethoscope", methods=["GET", "POST"])
 def trigger_stethoscope():
-    active_session["stethoscope_status"] = "clean"
-    active_session["patient_speech_text"] = "Auscultation: Clear lung sounds, regular S1/S2."
-    return {"status": "ok", "sensor": "MAX4466", "stethoscope_status": "clean", "lung_sound": "Clear"}
+    data = fetch_from_esp("REQ_STETH")
+    if data:
+        active_session["stethoscope_status"] = "recorded"
+        print(f"🩺 [API] STETHOSCOPE Triggered -> Status: {active_session['stethoscope_status']}")
+        return {"status": "ok", "sensor": "MAX4466", "stethoscope_status": "recorded"}
+    raise HTTPException(status_code=503, detail="Failed to fetch STETHOSCOPE from hardware")
 
 @app.api_route("/finalize_triage", methods=["GET", "POST"])
 def finalize_triage(payload: dict = None, db: Session = Depends(get_db)):

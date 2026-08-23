@@ -3,20 +3,14 @@ def extract_symptoms(audio_file_path: str) -> list:
         return []
     try:
         from transformers import pipeline
-        import scipy.io.wavfile as wav
-        import numpy as np
 
         print(f"\n[Audio] Processing file: {audio_file_path}")
         transcriber = pipeline("automatic-speech-recognition", model="openai/whisper-tiny", device="cpu")
         symptom_ner = pipeline("token-classification", model="d4data/biomedical-ner-all", device="cpu")
         
-        sample_rate, audio_data = wav.read(audio_file_path)
-        if audio_data.dtype == np.int16:
-            audio_data = audio_data.astype(np.float32) / 32768.0
-            
-        audio_input = {"sampling_rate": sample_rate, "raw": audio_data}
-        transcript = transcriber(audio_input)["text"].lower()
-        
+        # HuggingFace pipeline automatically uses ffmpeg to decode mp3, wav, flac, etc.
+        transcript_result = transcriber(audio_file_path)
+        transcript = transcript_result["text"].lower()
         
         print(f"[Audio] Whisper Transcript: '{transcript}'")
         
