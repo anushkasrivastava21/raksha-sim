@@ -199,7 +199,10 @@ def fetch_from_esp(cmd: str, timeout: int = 15):
     with serial_lock:
         try:
             esp_serial.reset_input_buffer()
-            esp_serial.write(f"{cmd}\n".encode('utf-8'))
+            esp_serial.reset_output_buffer()
+            # Send a newline first to flush any garbage bytes in the ESP32's RX buffer
+            esp_serial.write(f"\n{cmd}\n".encode('utf-8'))
+            esp_serial.flush()
             start_time = time.time()
             
             while time.time() - start_time < timeout:
