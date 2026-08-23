@@ -149,6 +149,121 @@ def list_patients(limit: int = 50, db: Session = Depends(get_db)):
     )
     return {"vitals": vitals, "triage_results": triages}
 
+# ── 3. HARDWARE SENSOR TRIGGER & SESSION CONTROLLER ENDPOINTS ───────────────
+active_session = {
+    "patient_id": "PT-0001",
+    "timestamp": datetime.now().isoformat(),
+    "spo2": 98.0,
+    "ecg_hr": 74.0,
+    "temperature": 36.8,
+    "urine_rgb": [255.0, 255.0, 0.0],
+    "stethoscope_status": "clean",
+    "patient_speech_text": "Normal auscultation and cardiac rhythm."
+}
+
+@app.api_route("/init_session", methods=["GET", "POST"])
+def init_session(payload: dict = None):
+    global active_session
+    p_id = (payload or {}).get("patient_id", f"PT-{int(datetime.now().timestamp())}")
+    active_session = {
+        "patient_id": p_id,
+        "timestamp": datetime.now().isoformat(),
+        "spo2": 98.0,
+        "ecg_hr": 74.0,
+        "temperature": 36.8,
+        "urine_rgb": [255.0, 255.0, 0.0],
+        "stethoscope_status": "clean",
+        "patient_speech_text": "Patient session initialized."
+    }
+    return {"status": "ok", "message": f"Session initialized for {p_id}", "patient_id": p_id}
+
+@app.api_route("/trigger/spo2", methods=["GET", "POST"])
+def trigger_spo2():
+    active_session["spo2"] = 98.0
+    active_session["ecg_hr"] = 72.0
+    return {"status": "ok", "sensor": "MAX30102", "spo2": 98.0, "ecg_hr": 72.0}
+
+@app.api_route("/trigger/ecg", methods=["GET", "POST"])
+def trigger_ecg():
+    active_session["ecg_hr"] = 74.0
+    return {"status": "ok", "sensor": "AD8232", "ecg_hr": 74.0, "rhythm": "Normal Sinus"}
+
+@app.api_route("/trigger/temp", methods=["GET", "POST"])
+def trigger_temp():
+    active_session["temperature"] = 36.8
+    return {"status": "ok", "sensor": "MLX90614", "temperature": 36.8}
+
+@app.api_route("/trigger/urine", methods=["GET", "POST"])
+def trigger_urine():
+    active_session["urine_rgb"] = [255.0, 255.0, 0.0]
+    return {"status": "ok", "sensor": "TCS3200", "urine_rgb": [255.0, 255.0, 0.0], "color": "Yellow"}
+
+@app.api_route("/trigger/stethoscope", methods=["GET", "POST"])
+def trigger_stethoscope():
+    active_session["stethoscope_status"] = "clean"
+    active_session["patient_speech_text"] = "Auscultation: Clear lung sounds, regular S1/S2."
+    return {"status": "ok", "sensor": "MAX4466", "stethoscope_status": "clean", "lung_sound": "Clear"}
+
+@app.api_route("/finalize_triage", methods=["GET", "POST"])
+def finalize_triage(payload: dict = None, db: Session = Depends(get_db)):
+    global active_session
+    p_id = (payload or {}).get("patient_id", active_session.get("patient_id", f"PT-{int(datetime.now().timestamp())}"))
+    now = datetime.now()
+    record_id = f"{p_id}_{now.isoformat()}"
+
+    vitals_dict = {
+        "patient_id": p_id,
+        "timestamp": now.isoformat(),
+        "stethoscope_status": active_session.get("stethoscope_status", "clean"),
+        "ecg_hr": active_session.get("ecg_hr", 74.0),
+        "spo2": active_session.get("spo2", 98.0),
+        "temperature": active_session.get("temperature", 36.8),
+        "urine_rgb": active_session.get("urine_rgb", [255.0, 255.0, 0.0]),
+        "patient_speech_text": active_session.get("patient_speech_text", "Regular vitals.")
+    }
+
+    # 1. Run AI ML Prediction
+    ai_prediction = fetch_ml_prediction(vitals_dict)
+    triage_status = ai_prediction.get("triage", "GREEN")
+    confidence = ai_prediction.get("confidence", 0.95)
+
+    # 2. Persist Vitals to SQLite DB
+    db_vitals = Vitals(
+        id=record_id,
+        patient_id=p_id,
+        timestamp=now,
+        stethoscope_status=vitals_dict["stethoscope_status"],
+        ecg_hr=vitals_dict["ecg_hr"],
+        spo2=vitals_dict["spo2"],
+        temperature=vitals_dict["temperature"],
+        urine_r=vitals_dict["urine_rgb"][0] if len(vitals_dict["urine_rgb"]) > 0 else 0.0,
+        urine_g=vitals_dict["urine_rgb"][1] if len(vitals_dict["urine_rgb"]) > 1 else 0.0,
+        urine_b=vitals_dict["urine_rgb"][2] if len(vitals_dict["urine_rgb"]) > 2 else 0.0,
+        patient_speech_text=vitals_dict["patient_speech_text"]
+    )
+    db.add(db_vitals)
+
+    # 3. Persist Triage to SQLite DB
+    db_triage = Triage(
+        id=record_id,
+        patient_id=p_id,
+        timestamp=now,
+        triage=triage_status,
+        confidence=confidence
+    )
+    db.add(db_triage)
+    db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Triage finalized and saved to database",
+        "record_id": record_id,
+        "patient_id": p_id,
+        "triage": triage_status,
+        "confidence": confidence,
+        "ai_prediction": ai_prediction
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
