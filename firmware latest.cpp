@@ -4,115 +4,33 @@
   ============================================================================
   Hackathon vitals rig firmware.
 
-  ROLE OF THIS FILE
-  ------------------
-  The ESP32 owns all five sensors. The Raspberry Pi 4 (RPi4) is the master:
-  it sends a short text command over Bluetooth Classic SPP asking for ONE
-  sensor's reading. The ESP32 waits 5s (per your spec), runs that sensor's
-  full read sequence (with its own messages/delays), then sends back a
-  single framed packet containing a JSON fragment + CRC8 checksum. The RPi4
-  is responsible for stashing each fragment into its own per-sensor Python
-  file and assembling the final unified JSON once all sensors are done.
-
-  REQUIRED ARDUINO LIBRARIES (Library Manager)
-  ---------------------------------------------
-  - "SparkFun MAX3010x Pulse and Proximity Sensor Library" (MAX30105.h)
-      -> also pulls in heartRate.h. The full SpO2 algorithm needs
-         spo2_algorithm.h/.cpp, which SparkFun ships inside that library's
-         examples (Example5_HeartRateAndSpO2). If it isn't auto-included,
-         copy spo2_algorithm.h/.cpp into this sketch folder.
-  - "Adafruit MLX90614 Library" (+ Adafruit BusIO dependency)
-  - Standard Serial is used for communication.
-
-  BOARD SETTINGS
-  --------------
-  Tools > Board: "ESP32 Dev Module" (or your specific ESP32 board)
-  Partition scheme: default
-
-  ============================================================================
-  PIN MAP -- taken verbatim from ESP32_Medical_Hardware_Pin_Configuration.docx
-  ============================================================================
-  Shared I2C bus (MAX30102 + MLX90614):
-      SDA  -> GPIO 21
-      SCL  -> GPIO 22
-
-  MAX30102 (pulse oximeter):
-      INT  -> GPIO 16
-      VCC/GND -> 3.3V, GND
-      (I2C address 0x57, on the shared bus above)
-
-  MLX90614 (IR temperature):
-      Shares I2C bus above (SDA=21, SCL=22). VCC/GND -> 3.3V, GND.
-
-  MAX4466 (electret mic / "stethoscope"):
-      OUT  -> GPIO 35  (ADC1_CH7, input-only pin)
-      GAIN -> left floating, set via onboard trim pot (no GPIO)
-      VCC/GND -> 3.3V, GND
-
-  AD8232 ECG module:
-      OUTPUT -> GPIO 34  (ADC1_CH6, input-only pin)
-      LO+  -> GPIO 32  (leads-off detect)
-      LO-  -> GPIO 33  (leads-off detect)
-      3.3V/GND -> 3.3V, GND
-
-  TCS3200 (color sensor):
-      S0   -> GPIO 13
-      S1   -> GPIO 17
-      S2   -> GPIO 18
-      S3   -> GPIO 19
-      OUT  -> GPIO 23
-      OE   -> tied directly to GND on the board (no ESP32 GPIO used)
-      VCC/GND -> 3.3V, GND
-
-  All modules share a common GND rail. Data is sent over USB Serial (UART).
-
-  ============================================================================
-  WIRE PROTOCOL (ESP32 <-> RPi4 over USB Serial)
-  ============================================================================
-  RPi4 -> ESP32 (ASCII, newline terminated):
-      "REQ_ECG\n"
-      "REQ_URINE\n"
-      "REQ_STETH\n"
-      "REQ_TEMP\n"
-      "REQ_SPO2\n"
-      "PING\n"        -> ESP32 replies "PONG\n" (liveness check, no sensor)
-
-  ESP32 -> RPi4 (ASCII, newline terminated), fixed field order:
-      "<SENSOR_CODE>|<json_payload>|<CRC8_hex>\n"
-
-      SENSOR_CODE is one of: ECG, URINE, STETH, TEMP, SPO2, ERR
-      json_payload is a single line of compact JSON matching the field
-        names used in your unified JSON schema (no spaces needed, but a
-        few are fine -- the CRC covers exactly what's between the pipes).
-      CRC8_hex is a 2-character uppercase hex CRC8 (poly 0x07) computed
-        over the raw bytes of "<SENSOR_CODE>|<json_payload>" (i.e.
-        everything before the second pipe). The RPi4 side should
-        recompute the same CRC8 over that substring to validate.
-
-      On error/timeout the ESP32 sends, e.g.:
-        "ERR|{\"sensor\":\"TEMP\",\"reason\":\"i2c_timeout\"}|4F\n"
-
-  ============================================================================
-  DESIGN NOTES / ASSUMPTIONS 
-  ============================================================================
-  1. Stethoscope modified per user request: takes exactly 50 samples, one sample 
-     every 1 second, without inhale/exhale prompts, displays each reading every second,
-     then computes min, max, and rms values.
-  2. BPM from only 20 raw ECG samples is not physiologically robust (a real
-     beat only needs ~1 QRS peak per ~0.6-1s, and 20 raw ADC points is a
-     very short window). I implemented a simple threshold peak-counter as a
-     placeholder (clearly marked).
-  3. TCS3200 color classification (pale/deep/reddish yellow) is NOT done on
-     the ESP32 -- it just ships raw R/G/B frequency counts. 
-  4. "Non-blocking" is implemented as: the Bluetooth link and command
-     parser are always serviced every loop() iteration.
-  ============================================================================
+  UPDATED FOR BLE:
+  This version uses ESP32 BLE (GATT Server) instead of USB Serial.
+  It advertises as "Raksha_Vitals_Rig" with a standard Nordic UART Service UUID.
+  It chunks large JSON payloads over BLE Notifications (TX) and receives commands
+  over BLE Writes (RX).
 */
 
 #include <Wire.h>
 #include <Adafruit_MLX90614.h>
 #include <MAX30105.h>
 #include "spo2_algorithm.h"   // ships with SparkFun MAX3010x library examples
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+// ----------------------------------------------------------------------------
+// BLE UUIDs (Nordic UART Service)
+// ----------------------------------------------------------------------------
+#define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+
+BLEServer *pServer = NULL;
+BLECharacteristic * pTxCharacteristic;
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
 
 // ----------------------------------------------------------------------------
 // PIN DEFINITIONS
@@ -156,9 +74,10 @@ static const uint32_t SPO2_SAMPLE_TIMEOUT_MS  = 8000;
 static const uint32_t SENSOR_STAGE_TIMEOUT_MS = 65000; // increased for 50s steth reading
 
 // ----------------------------------------------------------------------------
-// GLOBAL OBJECTS
+// GLOBAL SENSOR OBJECTS
 // ----------------------------------------------------------------------------
-bool serialClientConnected = true; // Assume true for USB Serial
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+MAX30105 max30102;
 
 // ----------------------------------------------------------------------------
 // STATE MACHINE TYPES
@@ -186,7 +105,6 @@ SystemState currentState = STATE_IDLE;
 SensorRequest pendingRequest = REQ_NONE;
 uint32_t stateEnteredAt = 0;
 
-// Generic sub-step counter 
 int subStep = 0;
 uint32_t subStepStartedAt = 0;
 
@@ -227,8 +145,38 @@ void beginTempSequence();
 void stepTempSequence();
 void beginSpo2Sequence();
 void stepSpo2Sequence();
-
+int estimateBpmFromEcgSamples();
 void readTcsColor(uint16_t &redCount, uint16_t &greenCount, uint16_t &blueCount);
+
+// ----------------------------------------------------------------------------
+// BLE CALLBACKS
+// ----------------------------------------------------------------------------
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println(F("[BLE] Client connected!"));
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println(F("[BLE] Client disconnected."));
+    }
+};
+
+class MyCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      String rxValue = pCharacteristic->getValue().c_str();
+      if (rxValue.length() > 0) {
+        String cleanCmd = rxValue;
+        cleanCmd.trim();
+        handleIncomingCommand(cleanCmd);
+      }
+    }
+};
+
+void onMax30102Interrupt() {
+  // empty interrupt handler as original
+}
 
 // ============================================================================
 // SETUP
@@ -238,9 +186,9 @@ void setup() {
   delay(200);
   Serial.println(F("[BOOT] ESP32 Vitals Rig starting..."));
 
+  // Pins Setup
   pinMode(PIN_ECG_LO_PLUS, INPUT);
   pinMode(PIN_ECG_LO_MINUS, INPUT);
-
   analogReadResolution(12); 
 
   pinMode(PIN_TCS_S0, OUTPUT);
@@ -254,14 +202,15 @@ void setup() {
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(400000);
 
+  // Sensor Init
   if (!mlx.begin()) {
-    Serial.println(F("[WARN] MLX90614 not detected at boot -- will retry error on request"));
+    Serial.println(F("[WARN] MLX90614 not detected at boot"));
   } else {
     Serial.println(F("[OK] MLX90614 initialized"));
   }
 
   if (!max30102.begin(Wire, I2C_SPEED_FAST)) {
-    Serial.println(F("[WARN] MAX30102 not detected at boot -- will retry error on request"));
+    Serial.println(F("[WARN] MAX30102 not detected at boot"));
   } else {
     max30102.setup(); 
     max30102.setPulseAmplitudeRed(0x0A);
@@ -272,7 +221,28 @@ void setup() {
   pinMode(PIN_MAX30102_INT, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(PIN_MAX30102_INT), onMax30102Interrupt, FALLING);
 
-  // Removed Bluetooth setup, standard Serial is already running.
+  // BLE Setup
+  BLEDevice::init("Raksha_Vitals_Rig");
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+
+  pTxCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID_TX,
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+  pTxCharacteristic->addDescriptor(new BLE2902());
+
+  BLECharacteristic * pRxCharacteristic = pService->createCharacteristic(
+                       CHARACTERISTIC_UUID_RX,
+                       BLECharacteristic::PROPERTY_WRITE
+                     );
+  pRxCharacteristic->setCallbacks(new MyCallbacks());
+
+  pService->start();
+  pServer->getAdvertising()->start();
+  Serial.println(F("[BLE] Advertising started. Waiting for connections..."));
 
   currentState = STATE_IDLE;
   Serial.println(F("[BOOT] Ready."));
@@ -282,12 +252,23 @@ void setup() {
 // MAIN LOOP
 // ============================================================================
 void loop() {
-  serviceSerialInput();
+  // BLE Connection management
+  if (!deviceConnected && oldDeviceConnected) {
+      delay(500); 
+      pServer->startAdvertising(); 
+      Serial.println(F("[BLE] Restarting advertising..."));
+      oldDeviceConnected = deviceConnected;
+  }
+  if (deviceConnected && !oldDeviceConnected) {
+      oldDeviceConnected = deviceConnected;
+  }
+
+  serviceSerialInput(); // Keep Serial available for debugging
   runStateMachine();
 }
 
 // ----------------------------------------------------------------------------
-// Serial command intake 
+// Serial command intake (Debugging)
 // ----------------------------------------------------------------------------
 void serviceSerialInput() {
   static String lineBuf;
@@ -307,11 +288,11 @@ void serviceSerialInput() {
 
 void handleIncomingCommand(String cmd) {
   cmd.trim();
-  Serial.print(F("[Serial] Received: "));
+  Serial.print(F("[CMD] Received: "));
   Serial.println(cmd);
 
   if (cmd == "PING") {
-    Serial.println("PONG");
+    sendPacket("SYS", "{\"response\":\"PONG\"}");
     return;
   }
 
@@ -503,11 +484,6 @@ void stepStethSequence() {
     int val = analogRead(PIN_MIC_ANALOG);
     stethSamples[stethSampleCount] = val;
     
-    Serial.print(F("[STETH] Sample "));
-    Serial.print(stethSampleCount + 1);
-    Serial.print(F("/50: "));
-    Serial.println(val);
-
     stethSampleCount++;
 
     if (stethSampleCount >= STETH_NUM_SAMPLES) {
@@ -629,7 +605,7 @@ void stepSpo2Sequence() {
 }
 
 // ============================================================================
-// PACKET FRAMING / CRC
+// PACKET FRAMING / CRC & BLE TRANSMISSION
 // ============================================================================
 uint8_t crc8(const uint8_t *data, size_t len) {
   uint8_t crc = 0x00;
@@ -650,13 +626,24 @@ void sendPacket(const String &sensorCode, const String &jsonPayload) {
   char crcHex[3];
   snprintf(crcHex, sizeof(crcHex), "%02X", crc);
 
-  String fullPacket = body + "|" + String(crcHex);
+  String fullPacket = body + "|" + String(crcHex) + "\n"; // appended newline for EOM tracking
 
-  if (serialClientConnected) {
-    Serial.println(fullPacket);
+  Serial.print(F("[TX-DEBUG] "));
+  Serial.print(fullPacket);
+
+  // Send via BLE using MTU chunking (default BLE MTU is 23 bytes -> 20 payload)
+  if (deviceConnected) {
+    int maxChunk = 20;
+    for (int i = 0; i < fullPacket.length(); i += maxChunk) {
+      String chunk = fullPacket.substring(i, i + maxChunk);
+      pTxCharacteristic->setValue(chunk.c_str());
+      pTxCharacteristic->notify();
+      delay(10); // Small delay to prevent queue overflow
+    }
+    Serial.println(F("[BLE] Payload sent successfully."));
+  } else {
+    Serial.println(F("[BLE] Payload NOT sent - No Client Connected."));
   }
-  Serial.print(F("[TX] "));
-  Serial.println(fullPacket);
 }
 
 void sendError(const String &sensorCode, const String &reason) {
