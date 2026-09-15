@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
+ALLOW_SYNTHETIC = False
 
 
 def sha(p: Path) -> str:
@@ -31,6 +32,8 @@ def check_tflite(dirs, name: str, optional: bool) -> tuple[str, bool]:
             else (f"{name}: MISSING - no model card, run the trainer", False)
     card = json.loads(card_p.read_text())
     rules_ok = optional and card.get("status") == "rules-compiled"
+    if card.get("status") == "synthetic-dev":
+        return (f"{name}: SYNTHETIC-DEV model - demo only, never a release", ALLOW_SYNTHETIC)
     if card.get("status") != "accepted" and not rules_ok:
         return f"{name}: REJECTED by its own gates - see {card_p.name}", False
     for d in dirs:
@@ -58,7 +61,11 @@ def check_triage() -> tuple[str, bool]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--flutter-assets", type=Path, default=None)
+    ap.add_argument("--allow-synthetic", action="store_true",
+                    help="demo build: pass with a synthetic-dev ECG model")
     args = ap.parse_args()
+    global ALLOW_SYNTHETIC
+    ALLOW_SYNTHETIC = args.allow_synthetic
     dirs = [BASE / "models"] + ([args.flutter_assets] if args.flutter_assets else [])
     results = [check_tflite(dirs, "ecg_cnn", optional=False),
                check_tflite(dirs, "urine_cnn", optional=True),

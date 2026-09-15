@@ -91,7 +91,8 @@ def _load_lite(path_str: str, allowed: tuple) -> Optional[_Lite]:
 
 
 def ecg_model() -> Optional[_Lite]:
-    return _load_lite(str(ECG.tflite_path), ("accepted",))          # never an untrained ECG
+    allowed = ("accepted", "synthetic-dev") if ECG.allow_synthetic else ("accepted",)
+    return _load_lite(str(ECG.tflite_path), allowed)
 
 
 def urine_model() -> Optional[_Lite]:
@@ -124,12 +125,25 @@ def assess_ecg(samples: Optional[Sequence[float]]) -> Dict:
     m = ecg_model()
     if m is None:
         return {"result": ECG.label_undetermined, "source": "no accepted ECG model"}
-    from ecg_preprocess import preprocess
-    logits = m.logits(preprocess(samples))
-    e = np.exp(logits - logits.max())
-    p = e / e.sum()
-    label = ECG.label_arrhythmia if p[1] > p[0] else ECG.label_normal
-    return {"result": label, "source": "ml-model", "p_abnormal": round(float(p[1]), 3)}
+    from ecg_preprocess import beat_windows, preprocess
+    beats = beat_windows(samples)
+    if not beats:
+        return {"result": ECG.label_undetermined, "source": "no beats detected"}
+    p_ab = []
+    for w in beats:
+        lg = m.logits(preprocess(w))
+        e = np.exp(lg - lg.max())
+        p_ab.append(float(e[1] / e.sum()))
+    n_ab = sum(p > 0.5 for p in p_ab)
+    if len(beats) == 1:
+        abnormal = n_ab == 1
+    else:
+        abnormal = n_ab >= max(ECG.min_abnormal_beats, ECG.min_abnormal_fraction * len(beats))
+    src = "ml-model" if m.status == "accepted" else \
+        "SYNTHETIC-DEV model - not clinically validated"
+    return {"result": ECG.label_arrhythmia if abnormal else ECG.label_normal,
+            "source": src, "beats": len(beats), "abnormal_beats": int(n_ab),
+            "max_p_abnormal": round(max(p_ab), 3)}
 
 
 def assess_symptoms(text: Optional[str]) -> List:
@@ -219,7 +233,7 @@ def assess(*, patient_id: str, ecg_hr=None, bp_systolic=None, bp_diastolic=None,
         reasons.append(f"Only {measured} of HR/SpO2/temperature measured - re-measure before clearing")
     reasons += [f"Reported symptom: {s.canonical} ({s.tier})" for s in symptoms]
     if arrhythmia:
-        reasons.append("ECG model: abnormal beat morphology")
+        reasons.append(f"ECG: {ecg['abnormal_beats']}/{ecg['beats']} abnormal beats [{ecg['source']}]")
     if urine["severity"] == 1:
         reasons.append(f"Urine colour abnormal [{urine['source']}]")
     reasons.append(f"Vitals model: P(Green/Yellow/Red) = "

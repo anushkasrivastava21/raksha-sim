@@ -1,0 +1,61 @@
+{
+  "model": "ecg_cnn",
+  "status": "synthetic-dev",
+  "tflite": "ecg_cnn.tflite",
+  "sha256": "1a0dac9e43e70a94d143edfdb005b57143e63a3a14610d70642528ada3b0c4d1",
+  "created_utc": "2026-09-15T19:20:03+00:00",
+  "WARNING": "Trained only on synthetic beats. Not valid for patient use. Replace with train_ecg_model.py (MIT-BIH) output.",
+  "architecture": "MLP 256-32(relu)-16(relu)-2, TFLite FULLY_CONNECTED only",
+  "dataset": {
+    "generator": "synth_ecg_model.py (Gaussian P-QRS-T + noise)",
+    "train_beats": 29000,
+    "records": 500,
+    "kinds": {
+      "normal": 16636,
+      "bbb": 3558,
+      "pvc": 4372,
+      "apc": 4434
+    }
+  },
+  "input": {
+    "shape": [
+      1,
+      1,
+      256
+    ],
+    "preprocess": "ecg_preprocess.preprocess",
+    "fs_hz": 360.0,
+    "r_peak_offset": 99
+  },
+  "output": [
+    "logit_normal (always 0)",
+    "logit_abnormal"
+  ],
+  "test_metrics_on_tflite": {
+    "n": 6960,
+    "tp": 2047,
+    "fn": 63,
+    "tn": 4812,
+    "fp": 38,
+    "sensitivity_abnormal": 0.9701421800947867,
+    "specificity": 0.9921649484536083,
+    "accuracy": 0.9854885057471264
+  },
+  "test_noisy_metrics_on_tflite": {
+    "n": 6960,
+    "tp": 1760,
+    "fn": 274,
+    "tn": 4115,
+    "fp": 811,
+    "sensitivity_abnormal": 0.8652900688298918,
+    "specificity": 0.8353633779943159,
+    "accuracy": 0.8441091954022989
+  },
+  "test_accuracy_by_kind": {
+    "normal": 0.9912176596249703,
+    "bbb": 0.9984301412872841,
+    "pvc": 0.9969293756397134,
+    "apc": 0.9470432480141218
+  },
+  "interpretation": "Scores measure how well the model learned the generator, nothing more."
+}

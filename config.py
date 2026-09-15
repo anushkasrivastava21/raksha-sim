@@ -89,6 +89,11 @@ class ECGConfig:
     stride: int = _resolve("ecg", "stride", 2, int)
     weights_path: Path = _resolve("ecg", "weights_path", "models/ecg_cnn.pt", _as_path)
     tflite_path: Path = _resolve("ecg", "tflite_path", "models/ecg_cnn.tflite", _as_path)
+    # Demo builds only: permit a model card with status "synthetic-dev".
+    allow_synthetic: bool = _resolve("ecg", "allow_synthetic", False, _as_bool)
+    # Strip-level decision: arrhythmia if enough individual beats are abnormal.
+    min_abnormal_beats: int = _resolve("ecg", "min_abnormal_beats", 2, int)
+    min_abnormal_fraction: float = _resolve("ecg", "min_abnormal_fraction", 0.10, float)
     label_normal: str = _resolve("ecg", "label_normal", "Normal Sinus Rhythm", str)
     label_arrhythmia: str = _resolve("ecg", "label_arrhythmia", "Arrhythmia Detected", str)
     # Fail-safe: never claim "Normal" when the pipeline could not actually decide.
