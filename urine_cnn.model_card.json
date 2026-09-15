@@ -1,0 +1,21 @@
+{
+  "model": "urine_cnn",
+  "status": "rules-compiled",
+  "tflite": "urine_cnn.tflite",
+  "sha256": "3bc36821dcd4fc8c7d469c477a4c514b2fe4f491821eccfb7e15eac62851f53e",
+  "created_utc": "2026-09-15T18:52:48+00:00",
+  "what": "urine_processor._rule_based_severity expressed as FC layers; NOT trained",
+  "input": {
+    "shape": [
+      1,
+      3
+    ],
+    "units": "RGB 0-255 (scale ADC by 255/4095 first)"
+  },
+  "output": [
+    "logit_normal",
+    "logit_abnormal (= rule margin, not a probability)"
+  ],
+  "verified": "argmax == rule on 20005 inputs (reference decoder)",
+  "replace_with": "train_urine_model.py once labelled data exists"
+}

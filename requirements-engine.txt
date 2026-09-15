@@ -1,0 +1,8 @@
+# ml_engine.py (FastAPI, port 8001) - no torch, no tensorflow, no xgboost
+fastapi>=0.110
+uvicorn>=0.29
+numpy>=1.26
+scipy>=1.11
+ai-edge-litert>=1.0     # TFLite runtime (successor to tflite-runtime)
+flatbuffers>=24.3       # only for build_urine_rules_tflite.py
+rapidfuzz>=3.6          # optional: fuzzy symptom matching
