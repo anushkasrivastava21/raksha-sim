@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 raksha.db
 *.db
+raksha-dash/
