@@ -1,28 +1,55 @@
-# Raksha Simulator (raksha-sim)
+# Raksha — VMEDITHON 3.0
 
-Raksha Simulator is a medical vital monitoring and automated triage system backend and frontend review interface.
+> **Raksha means protection. Six vitals, one phone, no signal required.**
 
-## Tech Stack
-- **Backend**: FastAPI (Python), SQLite
-- **AI/ML**: XGBoost (Triage engine)
-- **Hardware**: ESP32 (BLE GATT Server)
-- **Frontend**: Flutter / HTML mockups
+## 🚨 Problem Statement
+One ASHA (Accredited Social Health Activist) worker is often responsible for a thousand people, yet relies entirely on her judgment with no diagnostic equipment. If she's unsure, the patient's only option is an average 5.5 km walk to a clinic that is already stretched thin. Because no device today combines multi-vital sensing with offline, on-device triage, chronic conditions go undetected until they become emergencies.
 
-## Quick Start
-Get the backend API running locally in under 2 minutes:
+Raksha solves this: it reads six vitals and spoken symptoms, scores urgency on the spot, works without an internet connection, and fits in her bag.
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/anushkasrivastava21/raksha-sim.git
-cd raksha-sim
+## 🛠 Tech Stack
+- **Hardware/Firmware:** ESP32 (Arduino C++), BLE GATT service, CRC8 checksum framing.
+- **Mobile App:** Flutter/Dart (`flutter_blue_plus`, `tflite_flutter`, offline cache).
+- **Vitals AI (On-Device):** ECG and urine CNNs trained in PyTorch, exported to TensorFlow Lite.
+- **Voice & NLP (On-Device):** Vosk offline speech recognition (~40 MB) + Bilingual (English/Hindi) lexicon fuzzy matcher with negation handling.
+- **Triage Engine:** XGBoost decision boundaries ported to a lightweight Dart rule table, gated by a MEWS safety layer.
+- **Backend (Sync):** FastAPI + SQLite (for when connectivity returns).
 
-# 2. Install dependencies
-pip install -r requirements.txt
+## 🚀 Setup Steps
 
-# 3. Start the server
-uvicorn main:app --reload
-```
-API runs at `http://localhost:8000`.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/anushkasrivastava21/raksha-sim.git
+   cd raksha-sim
+   ```
+2. **Install Backend Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Run the API / Dashboard**
+   ```bash
+   uvicorn main:app --reload
+   ```
+4. **Hardware**: Flash `ESP32_VitalsRig_BLE_final_firmware 2.ino` using the Arduino IDE.
+5. **App**: Run the Flutter client from the `raksha-dash` repository.
+
+*Note: For deeper architectural details (ADRs, API specs), check the `docs/` folder!*
+
+## 👥 Team Members (All of us are Med)
+- **Anushka Srivastava** — Backend, database, cloud integration
+- **Anirudh G** — AI implementation, training, testing
+- **Arnav Semwal** — Flutter app development and deployment
+- **Shashwat Siddhant** — Firmware and hardware assembly
+- **Archie Sinha** — Research and testing
+
+## 📸 Demo & Screenshots
+- Interactive UI design screens and clinical mockups are available in the [`pages/`](pages/) directory.
+- *Insert Live Demo Link Here*
+
+## 🔮 Future Scope
+- **0–3 Months:** Add tokenised voice-symptom input directly into the AI model and flag dangerous condition combinations (not just single-disease probabilities).
+- **3–8 Months:** Validate model outputs against medical professional review and clinical guidelines.
+- **8–12 Months:** Pilot deployment with an ASHA worker cohort in a targeted district.
 
 ## Folder Structure & Documentation
 We use a standardized documentation structure. Start by exploring the `docs/` folder:
