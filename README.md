@@ -48,8 +48,8 @@ Raksha solves this: it reads six vitals and spoken symptoms, scores urgency on t
 
 ## 🔮 Future Scope
 - **0–3 Months:** Extend the AI model to flag dangerous condition combinations, evaluating multi-symptom severity rather than just single-disease probabilities.
-- **3–8 Months:** Validate model outputs against medical professional review and clinical guidelines.
-- **8–12 Months:** Pilot deployment with an ASHA worker cohort in a targeted district.
+- **3 Months:** Validate model outputs against medical professional review and clinical guidelines.
+- **6 Months:** Pilot deployment with an ASHA worker cohort in a targeted district.
 
 ## Folder Structure & Documentation
 We use a standardized documentation structure. Start by exploring the `docs/` folder:
