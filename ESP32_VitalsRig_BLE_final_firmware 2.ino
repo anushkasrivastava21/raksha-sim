@@ -309,7 +309,7 @@ static const uint32_t MLX_PLACEMENT_DELAY_MS  = 5000;
 static const uint32_t URINE_PLACEMENT_DELAY_MS = 3000;
 static const uint32_t TCS_PULSE_TIMEOUT_US     = 50000UL;
 
-static const uint32_t STETH_SAMPLE_INTERVAL_MS = 50; // 1 sample every 50ms
+static const uint32_t STETH_SAMPLE_INTERVAL_MS = 300; // 1 sample every 0.3 seconds
 static const int      STETH_NUM_SAMPLES       = 50;    // exactly 50 samples
 
 static const uint32_t SPO2_PLACE_FINGER_MSG_MS = 1500;
