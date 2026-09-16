@@ -28,6 +28,17 @@ Each screen folder contains:
 - `screen.png`: High-resolution visual mockup image.
 - `DESIGN.md`: Structural design guidelines and component specifications.
 
+## Hardware Firmware (ESP32 BLE)
+
+The `ESP32_VitalsRig_BLE_final_firmware 2.ino` serves as the primary hardware driver, collecting vital telemetry and broadcasting it to the mobile app via Bluetooth Low Energy (BLE).
+
+- **BLE Custom UUIDs:**
+  - Service: `6fa41660-6244-4aa0-aee4-06d9377ad51b`
+  - RX Characteristic (Commands In): `bf9dace6-017f-4793-abf9-5d117db16e55`
+  - TX Characteristic (Data Out): `41d5a28d-de2a-4ab4-aa6e-31ab8472925c`
+- **Protocol:** The mobile app writes commands (e.g., `REQ_ECG`, `REQ_SPO2`) to the RX characteristic. The ESP32 replies on the TX characteristic with formatted chunked payloads: `SENSOR_CODE|{json_payload}|CRC8_hex`.
+- **MTU Requirement:** The ESP32 requires a negotiated MTU of 247 bytes to prevent dropping large packets (especially continuous ECG waveforms). Client apps (e.g., Android/Flutter) must explicitly run `requestMtu(247)` upon connection.
+
 ## API Endpoints
 
 - `GET /`: API health check.
