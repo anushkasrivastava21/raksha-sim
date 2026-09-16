@@ -47,7 +47,7 @@ Raksha solves this: it reads six vitals and spoken symptoms, scores urgency on t
 - *Insert Live Demo Link Here*
 
 ## 🔮 Future Scope
-- **0–3 Months:** Add tokenised voice-symptom input directly into the AI model and flag dangerous condition combinations (not just single-disease probabilities).
+- **0–3 Months:** Extend the AI model to flag dangerous condition combinations, evaluating multi-symptom severity rather than just single-disease probabilities.
 - **3–8 Months:** Validate model outputs against medical professional review and clinical guidelines.
 - **8–12 Months:** Pilot deployment with an ASHA worker cohort in a targeted district.
 
