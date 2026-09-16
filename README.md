@@ -38,6 +38,7 @@ The `ESP32_VitalsRig_BLE_final_firmware 2.ino` serves as the primary hardware dr
   - TX Characteristic (Data Out): `41d5a28d-de2a-4ab4-aa6e-31ab8472925c`
 - **Protocol:** The mobile app writes commands (e.g., `REQ_ECG`, `REQ_SPO2`) to the RX characteristic. The ESP32 replies on the TX characteristic with formatted chunked payloads: `SENSOR_CODE|{json_payload}|CRC8_hex`.
 - **MTU Requirement:** The ESP32 requires a negotiated MTU of 247 bytes to prevent dropping large packets (especially continuous ECG waveforms). Client apps (e.g., Android/Flutter) must explicitly run `requestMtu(247)` upon connection.
+- **Stethoscope Configuration:** The analog microphone sample interval (`STETH_SAMPLE_INTERVAL_MS`) is configured to 300ms, resulting in a responsive 15-second reading for 50 samples.
 
 ## API Endpoints
 
