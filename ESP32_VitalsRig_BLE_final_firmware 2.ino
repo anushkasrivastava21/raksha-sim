@@ -541,7 +541,7 @@ void setup() {
   digitalWrite(PIN_TCS_S1, LOW);
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-  Wire.setClock(400000);
+  Wire.setClock(100000);
 
   if (!mlx.begin()) {
     Serial.println(F("[WARN] MLX90614 not detected at boot -- will retry error on request"));
@@ -890,6 +890,7 @@ void stepTempSequence() {
   }
 
   if (subStep == 1) {
+    delay(50);
     double tempC = mlx.readObjectTempC();
 
     if (isnan(tempC)) {
